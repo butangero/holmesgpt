@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 
 from holmes.main import app
 from holmes.checks.models import CheckResponse
+from holmes.checks.checks import CHECK_RESPONSE_FORMAT
 from holmes.core.tool_calling_llm import LLMResult
 
 
@@ -154,11 +155,13 @@ def test_checks_response_format_is_pydantic_model(mock_create_toolcalling_llm):
 
         assert result.exit_code == 0, f"CLI failed with output: {result.output}"
 
-    # The critical assertion: response_format must be the CheckResponse Pydantic class,
-    # NOT a raw dict (which breaks Vertex AI / Gemini with INVALID_ARGUMENT).
+    # The critical assertion: response_format must be CHECK_RESPONSE_FORMAT (the
+    # CheckResponse Pydantic model class), NOT a raw dict (which breaks Vertex AI /
+    # Gemini with INVALID_ARGUMENT).
     call_kwargs = mock_ai.call.call_args.kwargs
-    assert call_kwargs.get("response_format") is CheckResponse, (
-        "response_format must be the CheckResponse Pydantic model class so litellm "
-        "can translate it correctly for each provider (Vertex AI, Gemini, etc.). "
+    assert call_kwargs.get("response_format") is CHECK_RESPONSE_FORMAT, (
+        "response_format must be CHECK_RESPONSE_FORMAT (the CheckResponse Pydantic "
+        "model class) so litellm can translate it correctly for each provider "
+        "(Vertex AI, Gemini, etc.). "
         f"Got: {call_kwargs.get('response_format')!r}"
     )

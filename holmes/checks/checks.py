@@ -58,7 +58,7 @@ def _execute_ai_check(check: Check, ai: ToolCallingLLM) -> LLMResult:
         {"role": "system", "content": system_message},
         {"role": "user", "content": check.query},
     ]
-    response: LLMResult = ai.call(messages, response_format=CheckResponse)
+    response: LLMResult = ai.call(messages, response_format=CHECK_RESPONSE_FORMAT)
     return response
 
 
