@@ -7,6 +7,7 @@ import threading
 import time
 import unittest
 from io import StringIO
+from typing import Optional
 from unittest.mock import Mock, patch
 
 from rich.console import Console
@@ -1123,6 +1124,14 @@ class TestRendererEndToEnd(unittest.TestCase):
         renderer = AgenticProgressRenderer(console, tool_number_offset=0)
         root = logging.getLogger()
 
+        # In xdist workers the root logger may have no handlers, which means the
+        # filter would be installed on nothing and the buffer would stay empty.
+        # Add a temporary NullHandler to guarantee the filter has somewhere to sit.
+        temp_handler: Optional[logging.Handler] = None
+        if not root.handlers:
+            temp_handler = logging.NullHandler()
+            root.addHandler(temp_handler)
+
         # Install filter on all handlers (matches production behavior)
         for handler in root.handlers:
             handler.addFilter(renderer._log_filter)
@@ -1138,6 +1147,8 @@ class TestRendererEndToEnd(unittest.TestCase):
             for handler in root.handlers:
                 handler.removeFilter(renderer._log_filter)
             renderer._log_buffer.clear()
+            if temp_handler is not None:
+                root.removeHandler(temp_handler)
 
     def test_start_installs_log_filter_on_handlers(self):
         """start() should install the log filter on root logger's handlers."""

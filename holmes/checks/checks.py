@@ -5,7 +5,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Type
 
 import requests  # type:ignore
 import yaml
@@ -32,28 +32,11 @@ from holmes.core.usage_recorder import (
 from holmes.plugins.destinations.pagerduty.plugin import PagerDutyDestination
 from holmes.plugins.destinations.slack.plugin import SlackDestination
 
-CHECK_RESPONSE_FORMAT = {
-    "type": "json_schema",
-    "json_schema": {
-        "name": "check_response",
-        "strict": True,
-        "schema": {
-            "type": "object",
-            "properties": {
-                "rationale": {
-                    "type": "string",
-                    "description": "First, explain what you found and your reasoning",
-                },
-                "passed": {
-                    "type": "boolean",
-                    "description": "Based on your rationale above, does the check pass (true) or fail (false)?",
-                },
-            },
-            "required": ["rationale", "passed"],
-            "additionalProperties": False,
-        },
-    },
-}
+# Use the CheckResponse Pydantic model as response_format so litellm can translate
+# it correctly for each provider (OpenAI json_schema, Vertex AI responseSchema, etc.).
+# Passing a raw OpenAI-format dict with "type": "json_schema" / "strict": True
+# causes Vertex AI / Gemini to return INVALID_ARGUMENT.
+CHECK_RESPONSE_FORMAT: Type[CheckResponse] = CheckResponse
 CHECK_PROMPT_TEMPLATE_PATH = Path(__file__).parent / "check_system_prompt.jinja2"
 
 CHECK_STATUS_COLOR = {
@@ -75,7 +58,7 @@ def _execute_ai_check(check: Check, ai: ToolCallingLLM) -> LLMResult:
         {"role": "system", "content": system_message},
         {"role": "user", "content": check.query},
     ]
-    response: LLMResult = ai.call(messages, response_format=CHECK_RESPONSE_FORMAT)
+    response: LLMResult = ai.call(messages, response_format=CheckResponse)
     return response
 
 

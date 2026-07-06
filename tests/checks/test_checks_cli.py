@@ -7,6 +7,7 @@ import yaml
 from typer.testing import CliRunner
 
 from holmes.main import app
+from holmes.checks.models import CheckResponse
 from holmes.core.tool_calling_llm import LLMResult
 
 
@@ -111,3 +112,53 @@ def test_checks_cli_inline_check(mock_create_toolcalling_llm):
 
     # Verify LLM was called
     mock_ai.call.assert_called_once()
+
+
+@patch("holmes.config.Config.create_toolcalling_llm")
+def test_checks_response_format_is_pydantic_model(mock_create_toolcalling_llm):
+    """Verify ai.call() receives CheckResponse (Pydantic model) as response_format.
+
+    Passing a raw OpenAI-format dict with "type": "json_schema" / "strict": True
+    causes Vertex AI / Gemini to return INVALID_ARGUMENT. litellm can only translate
+    the format correctly per-provider when given a Pydantic model class.
+    """
+    mock_ai = MagicMock()
+    mock_ai.llm.model = "vertex_ai/gemini-pro"
+
+    mock_response = LLMResult(
+        result=json.dumps({"passed": True, "rationale": "Everything looks healthy."}),
+        tool_calls=[],
+    )
+    mock_ai.call.return_value = mock_response
+    mock_create_toolcalling_llm.return_value = mock_ai
+
+    checks_config = {
+        "version": 1,
+        "checks": [
+            {
+                "name": "vertex-compat-check",
+                "query": "Are all pods running?",
+                "description": "Vertex AI compatibility check",
+            }
+        ],
+    }
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml") as f:
+        yaml.dump(checks_config, f)
+        checks_file = Path(f.name)
+
+        result = runner.invoke(
+            app,
+            ["checks", "run", "--checks-file", str(checks_file), "--mode", "monitor"],
+        )
+
+        assert result.exit_code == 0, f"CLI failed with output: {result.output}"
+
+    # The critical assertion: response_format must be the CheckResponse Pydantic class,
+    # NOT a raw dict (which breaks Vertex AI / Gemini with INVALID_ARGUMENT).
+    call_kwargs = mock_ai.call.call_args.kwargs
+    assert call_kwargs.get("response_format") is CheckResponse, (
+        "response_format must be the CheckResponse Pydantic model class so litellm "
+        "can translate it correctly for each provider (Vertex AI, Gemini, etc.). "
+        f"Got: {call_kwargs.get('response_format')!r}"
+    )
