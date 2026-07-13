@@ -35,7 +35,12 @@ def _make_check() -> Check:
 def _make_model_response(content: str) -> ModelResponse:
     """Build a minimal litellm ModelResponse for the coerce phase."""
     return ModelResponse(
-        choices=[Choices(message=Message(role="assistant", content=content))],
+        choices=[
+            Choices(
+                message=Message(role="assistant", content=content),
+                finish_reason="stop",
+            )
+        ],
         usage=Usage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
     )
 
@@ -51,6 +56,7 @@ def test_gemini_uses_two_phase_execution():
         tool_calls=[],
         num_llm_calls=2,
         messages=[{"role": "assistant", "content": "..."}],
+        finish_reason="tool_calls",
         total_cost=0.01,
         total_tokens=100,
         prompt_tokens=80,
@@ -83,6 +89,8 @@ def test_gemini_uses_two_phase_execution():
     }
     # ...and the tool calls / message history from the investigation.
     assert result.messages == investigation.messages
+    # finish_reason reflects the phase-2 coerce call, not the investigation.
+    assert result.finish_reason == "stop"
     # Costs from both phases are summed.
     assert result.total_cost == 0.01
     assert result.total_tokens == 115  # 100 (phase 1) + 15 (phase 2)

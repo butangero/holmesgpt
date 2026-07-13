@@ -138,9 +138,15 @@ def _execute_ai_check_two_phase(
     )
 
     try:
-        coerce_content = coerce_response.choices[0].message.content or ""  # type: ignore[union-attr]
+        coerce_choice = coerce_response.choices[0]  # type: ignore[union-attr]
+        coerce_content = coerce_choice.message.content or ""
     except (AttributeError, IndexError):
+        coerce_choice = None
         coerce_content = ""
+
+    # The returned result is the phase-2 (coerce) content, so report its finish
+    # reason. Fall back to the investigation's when the coerce response omits it.
+    coerce_finish_reason = getattr(coerce_choice, "finish_reason", None)
 
     # Sum cost/token stats from both phases (LLMResult is a RequestStats subclass).
     stats = RequestStats()
@@ -155,7 +161,7 @@ def _execute_ai_check_two_phase(
         num_llm_calls=(investigation.num_llm_calls or 0) + 1,
         messages=investigation.messages,
         metadata=investigation.metadata,
-        finish_reason=investigation.finish_reason,
+        finish_reason=coerce_finish_reason or investigation.finish_reason,
         **stats.model_dump(),
     )
 
